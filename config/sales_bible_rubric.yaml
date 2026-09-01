@@ -1,0 +1,428 @@
+# =============================================================================
+# Accredian Sales Bible — Compiled Evaluation Rubric
+# =============================================================================
+# Source: Accredian_Sales_Bible.docx (Manvender Singh)
+# This file distils the Bible's *observable* standards into machine-checkable
+# dimensions. Narrative content (CEO letter, reflections, 10-Conversation
+# Challenges) is intentionally excluded — it is not verifiable in a transcript.
+#
+# CONTRACT: the LLM assigns a BAND per dimension. It never computes a score.
+# All arithmetic happens in src/scoring.py.
+#
+# Bump rubric_version on ANY change. It is stamped into every DB row so that
+# historical scores stay comparable.
+# =============================================================================
+
+rubric_version: "1.0.0"
+source_document: "Accredian_Sales_Bible.docx"
+last_compiled: "2026-08-26"
+
+bands:
+  # Ordinal scale used by every dimension. Derived from the Bible's own
+  # "Average vs Good vs Great Sales Rep" tables (Ch 5, Ch 10).
+  not_applicable: null   # stage never reached; weight is redistributed
+  missing: 0             # stage reached but behaviour entirely absent
+  average: 1             # the Bible's "Average Sales Rep" column
+  good: 2                # the Bible's "Good Sales Rep" column
+  great: 3               # the Bible's "Great Sales Rep" column
+
+evidence_policy:
+  # Any band above `missing` MUST carry at least one verbatim quote with a
+  # timestamp. Unevidenced praise is auto-demoted one band by the scorer.
+  require_quote_above_band: 0
+  min_quotes: 1
+  max_quotes: 3
+  demote_if_unevidenced: true
+
+# =============================================================================
+# DIMENSIONS
+# Weights are relative and sum to 100. scoring.py rescales them onto the
+# methodology component (default 45 of the final 100) after dropping any
+# dimension marked not_applicable.
+# =============================================================================
+
+dimensions:
+
+  # ---------------------------------------------------------------------------
+  - id: customer_profiling
+    name: "Customer Profiling & Rapport"
+    chapter: "Chapter 5 — The 5 Behaviours That Build Rapport"
+    weight: 12
+    applicability:
+      applicable_when: "The rep asks any question about the customer's background, role, or history."
+      not_applicable_when: "Call is a pure transactional follow-up (e.g. payment link, document chase) with no discovery intent."
+    what_to_look_for:
+      - "Listens for signals behind the answer — career achievements, direction changes, emotional cues — rather than recording facts."
+      - "Asks second-level questions: the first answer gives facts, the second reveals motivation."
+      - "Acknowledgement feels genuine and varied, not scripted."
+      - "Shows empathy when the customer discloses something difficult (layoff, stalled growth, family load) before moving on."
+    anchors:
+      missing: "Rep collects no background at all, or fires questions with zero acknowledgement between them."
+      average: >
+        Mechanical question-to-question movement. Responds 'Ok' / 'Okay' / 'Noted' and immediately
+        asks the next item. Customer feels interviewed rather than understood.
+      good: >
+        Acknowledges the answer and asks one relevant follow-up.
+        Bible example: "That's an interesting transition. What made you move into operations?"
+      great: >
+        Reflects the significance back, then asks a second-level question tying the detail to career direction.
+        Bible example: "Moving from marketing to operations is a significant shift. What motivated this
+        change, and how has this transition shaped your career goals?"
+    penalty_signals:
+      # Explicit "Mistakes to Avoid" table, Ch 5
+      - id: repetitive_acknowledgement
+        description: "Repeated scripted fillers — Great / Awesome / Perfect / Wonderful — after answers."
+        bible_note: "Conversation feels scripted and unnatural."
+        deterministic_metric: repetitive_ack_ratio
+        threshold: 0.35
+      - id: okay_and_advance
+        description: "'Okay' followed immediately by the next question, no acknowledgement."
+        bible_note: "Creates emotional distance."
+        deterministic_metric: okay_advance_count
+        threshold: 3
+      - id: empathy_omission
+        description: "Customer discloses hardship; rep moves straight to the next question."
+        bible_note: "Customer feels the interaction is transactional."
+        deterministic_metric: null
+      - id: first_level_only
+        description: "Only first-level questions asked; no motivation uncovered."
+        deterministic_metric: second_level_question_count
+        threshold: 2
+
+  # ---------------------------------------------------------------------------
+  - id: need_identification
+    name: "Need Identification"
+    chapter: "Chapter 6 — Need Identification"
+    weight: 18
+    applicability:
+      applicable_when: "Any call where a program is discussed or recommended."
+      not_applicable_when: "Rebooking / scheduling-only call under 3 minutes."
+    what_to_look_for:
+      # The Bible's own 6-question Rep Playbook. Treat as a sub-checklist.
+      - id: trigger
+        check: "Why is the customer exploring NOW? Trigger understood."
+      - id: long_term_aspiration
+        check: "Long-term (5–10 year) aspiration uncovered, not just the next designation."
+      - id: growth_definition
+        check: "What 'growth' means to THIS customer — designation, comp, leadership, transition."
+      - id: skill_gaps
+        check: "Specific capability gaps uncovered, discovered by the customer rather than supplied by the rep."
+      - id: barriers
+        check: "What is stopping them — skills, confidence, exposure, opportunity, or relevance gap."
+      - id: alignment_summary
+        check: "Rep summarises understanding and asks the customer to confirm it."
+    anchors:
+      missing: "Rep moves from greeting to program pitch without establishing any goal or gap."
+      average: >
+        Accepts the surface answer. Customer says 'I am an AVP and want to become a VP' and the rep
+        replies 'Great, this program will help you become a VP.' Only the immediate next step is understood.
+      good: >
+        Covers 3–4 of the six playbook questions. Uncovers aspiration and some skill gaps, but does not
+        summarise or confirm understanding before recommending.
+      great: >
+        Covers 5–6 questions, pushes past the next designation to the 5–10 year vision, breaks generic
+        skills into specifics, and closes with the Bible's Step 5 summary:
+        "So let me summarise what I have understood... Have I understood your goals correctly?"
+    penalty_signals:
+      - id: putting_words_in_mouth
+        description: "Rep supplies the skill gap instead of eliciting it — 'So you want leadership and strategic thinking, right?'"
+        bible_note: "The customer should discover the gap themselves."
+      - id: generic_skills_unexplored
+        description: "Customer names a broad skill (communication, team management) and rep does not decompose it."
+      - id: solving_confusion_early
+        description: "Customer is torn between two paths and the rep picks one for them."
+      - id: no_confirmation
+        description: "No summarise-and-confirm before moving to Vision Setting or Program Mapping."
+        deterministic_metric: summary_confirm_hits
+        threshold: 1
+
+  # ---------------------------------------------------------------------------
+  - id: vision_setting
+    name: "Vision Setting"
+    chapter: "Chapter 7 — Vision Setting"
+    weight: 13
+    applicability:
+      applicable_when: "The rep discusses the customer's future role, market trends, or required capabilities."
+      not_applicable_when: "Call ends during or before Need Identification."
+    what_to_look_for:
+      - "Personalises using the customer's OWN words — 'As you mentioned...', 'Based on what you shared...', 'Given your current role...'"
+      - "Two-way dialogue: pauses after key points to check connection, not just 'does that make sense?'"
+      - "Explains WHY a capability matters for their future role, not just what the program teaches."
+      - "Uses the customer's name naturally."
+    anchors:
+      missing: "No future-state conversation at all, or jumps straight from questions to curriculum."
+      average: >
+        Generic trend monologue. 'AI is transforming industries...' / 'Leadership today requires
+        strategic thinking.' Correct information, but the customer is a passive listener.
+      good: >
+        Connects the vision to the customer's stated goal at least once and checks in afterwards,
+        but the bulk of the section is still one-directional delivery.
+      great: >
+        Every major point is anchored to something the customer said, with alignment checks throughout.
+        Bible example: "Since you mentioned that you want to move from a technical role into leadership,
+        one important shift at that stage is moving from only solving technical problems to influencing
+        business decisions and leading teams."
+    penalty_signals:
+      # "What Hurts the Conversation" table, Ch 7
+      - id: monologue
+        description: "Speaking continuously for several minutes without customer input."
+        bible_note: "Customer becomes a passive listener."
+        deterministic_metric: longest_rep_monologue_sec
+        threshold: 120
+      - id: no_callback
+        description: "Never refers to the earlier discussion."
+        deterministic_metric: personalization_callback_count
+        threshold: 2
+      - id: name_unused
+        description: "Customer's name never used."
+        deterministic_metric: customer_name_count
+        threshold: 1
+      - id: hope_this_makes_sense
+        description: "Says 'I hope this makes sense' rather than opening a dialogue."
+        bible_note: "Puts responsibility on the customer instead of creating dialogue."
+      - id: alignment_only_at_end
+        description: "Alignment checked once at the end rather than throughout."
+
+  # ---------------------------------------------------------------------------
+  - id: program_mapping
+    name: "Program Mapping"
+    chapter: "Chapter 8 — Program Mapping"
+    weight: 15
+    applicability:
+      applicable_when: "The rep explains any part of the curriculum, modules, USPs, or program structure."
+      not_applicable_when: "Program was never presented."
+    what_to_look_for:
+      - "Every feature is connected to a need the customer already stated."
+      - "Outcomes explained, not curriculum recited."
+      - "Alignment checkpoints after each major section."
+      - "Emphasis weighted toward what THIS customer values, not equal airtime for every USP."
+      - "Program fit confirmed BEFORE the fee is introduced."
+    anchors:
+      missing: "No program explanation, or a pure feature dump with zero customer linkage."
+      average: >
+        Module-by-module walkthrough. Sounds like a brochure. Customer would finish thinking
+        'This sounds like a good program.'
+      good: >
+        Some features tied back to stated goals, outcomes mentioned alongside content, at least one
+        alignment check. Fit not explicitly confirmed before fees.
+      great: >
+        Each pillar mapped to a named gap, framed as outcome, with regular check-ins, and closes with
+        the Bible's pre-fee gate: "Based on everything we've discussed so far, does this program broadly
+        fit what you're looking for?" Customer would finish thinking 'This is exactly what I need.'
+    penalty_signals:
+      - id: brochure_mode
+        description: "Curriculum recited module by module with no need linkage."
+      - id: features_not_outcomes
+        description: "Says what the program includes without explaining why the customer should care."
+      - id: fee_before_fit
+        description: "Moves to fee discussion without confirming program fit."
+        bible_note: "Increases price objections because value hasn't been established."
+      - id: no_resonance_probe
+        description: "Never asks which part resonates most — misses the buying signal."
+      - id: generic_test_fails
+        description: "If the customer's name were removed, the explanation would sound identical for anyone."
+
+  # ---------------------------------------------------------------------------
+  - id: fee_and_urgency
+    name: "Fee Discussion & Urgency"
+    chapter: "Chapter 9 — Fee Discussion & Urgency"
+    weight: 14
+    applicability:
+      applicable_when: "Fee, scholarship, EMI, or investment is discussed."
+      not_applicable_when: "Call ends before any commercial discussion."
+    what_to_look_for:
+      - id: rule_of_three
+        check: "State the fee → state payment flexibility → ask a question → STOP TALKING."
+      - id: no_preemptive_justification
+        check: "Fee stated confidently, not apologised for or justified before the customer reacts."
+      - id: budget_question_asked
+        check: "Asks 'Is this investment broadly within the budget you had in mind?'"
+      - id: diagnose_before_respond
+        check: "On a budget objection, asks a diagnostic question before selling. Overall investment or monthly outflow? Affordability or value?"
+      - id: scholarship_simplicity
+        check: "Scholarship stated plainly. No manager-approval theatre, no seat-count escalation."
+      - id: genuine_urgency
+        check: "Urgency comes from fact (limited allocation, first-come basis), not emotion."
+    anchors:
+      missing: "Fee never stated when it should have been, or stated and immediately buried under justification."
+      average: >
+        States the fee then keeps talking. Justifies before the customer reacts. Over-explains the
+        scholarship: 'I have spoken to my manager and there are only two seats left...'
+      good: >
+        States the fee clearly with payment options and asks about budget, but fills the silence or
+        starts selling before diagnosing the objection.
+      great: >
+        Executes the Rule of Three and stops. Lets silence work. On pushback, asks exactly one diagnostic
+        question first. Scholarship stated once, simply, then a single question: 'Would you like me to
+        help you secure one of those scholarship opportunities?'
+    penalty_signals:
+      - id: filled_the_silence
+        description: "Rep continues speaking immediately after stating fee or scholarship."
+        deterministic_metric: rep_words_after_fee_15s
+        threshold: 45
+      - id: artificial_urgency
+        description: "'You'll lose the opportunity' / 'last chance' / 'you have to decide now'."
+        bible_note: "Damages trust and credibility. Pressure creates resistance."
+        deterministic_metric: pressure_phrase_count
+        threshold: 0
+        # NOTE: this overlaps the compliance layer's Pressure Tactics check.
+        # scoring.py suppresses the methodology penalty when an incident was
+        # already raised, to avoid double-jeopardy.
+        overlaps_compliance: true
+      - id: no_budget_question
+        description: "Never checks whether the investment fits the customer's budget."
+      - id: defensive_tone
+        description: "Sounds apologetic or defensive while discussing price."
+
+  # ---------------------------------------------------------------------------
+  - id: objection_handling
+    name: "Objection Handling"
+    chapter: "Chapter 10 — P.A.C.E. / D.C.R.U."
+    weight: 18
+    applicability:
+      applicable_when: "The customer raises any hesitation, objection, or deferral."
+      not_applicable_when: "No objection was raised at any point in the call."
+    what_to_look_for:
+      - id: pause
+        check: "P — Lets the customer finish without interrupting."
+      - id: acknowledge
+        check: "A — Shows understanding: 'I completely understand.' / 'That's a fair point.'"
+      - id: clarify
+        check: "C — Asks one more diagnostic question BEFORE answering. The step average reps skip."
+      - id: educate
+        check: "E — Responds to the actual concern, then checks alignment."
+      - id: personalised_reinforcement
+        check: "Reconnects to what was learned earlier rather than 'this is a great program'."
+      - id: urgency_last
+        check: "Urgency introduced only AFTER the concern is resolved."
+      - id: ends_with_clarity
+        check: "Call ends with a defined next step, never 'Okay, think about it.'"
+    anchors:
+      missing: "Objection raised and either ignored, or met with immediate capitulation and no next step."
+      average: >
+        'Sure, no problem. I'll call you over the weekend.' — or the opposite failure, launching into
+        another five-minute pitch. One gives up; the other overwhelms.
+      good: >
+        Acknowledges and asks a general clarifying question — 'May I ask what you'd like to think about?'
+        — then answers, but does not reconnect to the customer's own stated goals.
+      great: >
+        Full P.A.C.E. execution. Bible example: "I completely understand, Manav. It's an important career
+        decision. Just so I can help you better, what specifically would you like to think through? Is it
+        the program, the investment, or simply taking some time?" — then resolves that specific concern,
+        reinforces with the customer's own goals, and only then introduces genuine scholarship urgency.
+    penalty_signals:
+      - id: answered_before_understanding
+        description: "Responds to an assumed objection without diagnosing."
+        bible_note: "Solves the wrong problem."
+      - id: accepted_deferral
+        description: "'I need time' accepted without a single probing question."
+      - id: urgency_before_resolution
+        description: "Urgency deployed before the concern is addressed."
+        bible_note: "Creates pressure instead of confidence."
+      - id: multi_objection_dump
+        description: "Answers five concerns at once instead of resolving one at a time."
+      - id: argumentative
+        description: "Sounds like winning an argument rather than reducing uncertainty."
+      - id: no_next_step
+        description: "Conversation ends without a concrete next action."
+
+  # ---------------------------------------------------------------------------
+  - id: trust_journey
+    name: "Trust Journey Progression"
+    chapter: "Framework 4 — The TRUST Journey"
+    weight: 10
+    scoring_mode: stage_tracker   # scored by furthest stage reached, not BARS
+    applicability:
+      applicable_when: "Always."
+    stages:
+      - id: hear_me
+        order: 1
+        customer_feeling: "You understand what I am saying."
+        rep_responsibility: "Listen actively; let the customer share goals and concerns."
+      - id: understand_me
+        order: 2
+        customer_feeling: "You understand my situation."
+        rep_responsibility: "Ask questions; uncover motivations, challenges, aspirations."
+      - id: guide_me
+        order: 3
+        customer_feeling: "Your recommendation fits my needs."
+        rep_responsibility: "Connect the right solution to the customer's goals."
+      - id: reassure_me
+        order: 4
+        customer_feeling: "My concerns have been addressed."
+        rep_responsibility: "Handle objections; build confidence through evidence."
+      - id: i_ll_decide
+        order: 5
+        customer_feeling: "I am ready to move forward."
+        rep_responsibility: "Help the customer make an informed decision."
+    rules:
+      - "Stages are sequential. A stage counts as reached only if all prior stages were also reached."
+      - "Award the stage based on CUSTOMER signal, not rep effort. The rep asking questions is not
+         evidence of Understand Me; the customer confirming the rep understood them is."
+      - "A call that skips from Hear Me to a close attempt is a rushed call, not a complete one."
+    band_mapping:
+      # furthest_stage_reached -> band
+      0: missing
+      1: missing
+      2: average
+      3: good
+      4: good
+      5: great
+
+# =============================================================================
+# CROSS-CUTTING DIAGNOSTICS
+# Reported in the HTML but NOT separately weighted — they are already reflected
+# inside the dimensions above. Kept separate to avoid double-counting.
+# =============================================================================
+
+diagnostics:
+
+  four_whys:
+    chapter: "Framework 2 — The 4 WHYs"
+    description: "A customer with unanswered WHYs will hesitate. Report which were left open."
+    items:
+      - id: why_change
+        question: "Why is my current situation not enough?"
+        rep_action: "Help the customer understand the need for growth."
+      - id: why_now
+        question: "Why should I act today instead of waiting?"
+        rep_action: "Help the customer understand the cost of delay."
+      - id: why_accredian
+        question: "Why is this the right program and learning partner?"
+        rep_action: "Connect Accredian's value to their career goals."
+      - id: why_you
+        question: "Can I trust your guidance?"
+        rep_action: "Build trust by advising, not selling."
+    statuses: [answered, partial, unanswered, not_applicable]
+
+  hfte_balance:
+    chapter: "Framework 1 — The HFTE Framework"
+    description: >
+      Hope + Trust must become stronger than Fear + Effort. Report which drivers the rep
+      addressed so coaching can target the weak side.
+    drivers:
+      - id: hope
+        meaning: "The better future the customer wants."
+        rep_action: "Understand the desired future before presenting the solution."
+      - id: fear
+        meaning: "Risk, failure, time, money, wrong decision."
+        rep_action: "Identify concerns and help overcome uncertainty."
+      - id: trust
+        meaning: "Belief that the rep understands them."
+        rep_action: "Listen deeply, educate honestly, recommend with credibility."
+      - id: effort
+        meaning: "Time, energy, and commitment required."
+        rep_action: "Reduce perceived difficulty; show a practical path."
+    statuses: [addressed, partially_addressed, not_addressed]
+
+# =============================================================================
+# SEVEN PRINCIPLES — used only for the report's closing coaching line.
+# =============================================================================
+principles:
+  - "Lead with Curiosity."
+  - "Sell Clarity, Not Information."
+  - "Understand Before You Advise."
+  - "Personalize Every Recommendation."
+  - "Sell Outcomes, Not Features."
+  - "Every Objection Deserves One More Question."
+  - "Create Confidence & Trust Before Creating Urgency."

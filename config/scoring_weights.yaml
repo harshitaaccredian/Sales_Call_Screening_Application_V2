@@ -1,0 +1,136 @@
+# =============================================================================
+# Scoring configuration
+# =============================================================================
+# All arithmetic for the final call score lives in src/scoring.py and is driven
+# by this file. The LLM never computes a number — it emits bands and evidence.
+#
+# Bump scoring_version on ANY change here. It is stamped into every DB row
+# alongside rubric_version so historical scores remain comparable.
+# =============================================================================
+
+scoring_version: "2.1.0"   # 2.1.0: compliance softened; bands on a clean 0-10 scale
+
+components:
+  compliance:   40    # fact-check / incident layer  (existing analysis_prompt.md)
+  methodology:  60    # Sales Bible adherence        (new methodology_prompt.md)
+  # -----
+  # total: 100
+  #
+  # NOTE: pitch-step coverage is deliberately NOT a component here. It belongs
+  # to the pre-existing `overall_call_score` section that renders only when a
+  # Sales Pitch is uploaded. That score and this one are independent and must
+  # stay that way — blending them would double-count the same call.
+
+# -----------------------------------------------------------------------------
+# Compliance
+# -----------------------------------------------------------------------------
+compliance:
+  # The compliance budget comes from components.compliance above — do not
+  # duplicate it here. scoring.py raises if a legacy `start:` disagrees with it.
+  # Softened from L1:3 / L2:10 / L3:25. A typical call with one L2 and a
+  # couple of L1s now keeps ~27/40 instead of ~21/40 — roughly 6 points back
+  # on the total, enough to stop routine slips reading as a failing call.
+  deductions:
+    L1: 2
+    L2: 7
+    L3: 20
+  floor: 0
+
+  # Hard ceilings. A fabricated placement guarantee is not offset by warm
+  # rapport — compliance bounds the total, it does not merely subtract from it.
+  caps:
+    # L3 stays at 40. This is the fabricated-claim case — a placement
+    # guarantee that was never offered, a fee that does not exist. Softening
+    # the everyday deductions is reasonable; softening this would remove the
+    # one mechanism that stops a charming rep from outscoring an honest one.
+    L3: 40      # any L3 present -> total_score cannot exceed 40
+    L2: 75      # relaxed from 70
+    L1: 100     # L1 alone does not cap
+
+  # Repeat violations in the same category compound. Second and subsequent
+  # incidents of the same category cost this multiple of the base deduction.
+  repeat_category_multiplier: 1.3   # relaxed from 1.5
+
+# -----------------------------------------------------------------------------
+# Methodology (Sales Bible)
+# -----------------------------------------------------------------------------
+methodology:
+  # band -> fraction of the dimension's available points
+  # Displayed to management as a score out of 10, so keep these round:
+  # 0.0 / 3.5 / 7.0 / 10.0 out of 10.
+  band_values:
+    missing: 0.0
+    average: 0.35
+    good: 0.70
+    great: 1.0
+
+  # Dimensions marked not_applicable are dropped and the remaining weights are
+  # renormalised, so a 6-minute discovery call is not punished for never
+  # reaching Program Mapping.
+  # POLICY CHOICE, not a maths detail. Flip it and re-run a few calls.
+  #
+  #  true  - score is out of what the call ATTEMPTED. An N/A criterion's weight
+  #          spreads over the rest, so a call where the customer never objected
+  #          can still reach 60. Rationale: the rep cannot make a customer raise
+  #          an objection, and the Trust Journey criterion ALREADY docks the call
+  #          for not reaching reassure_me. Removing the weight as well would
+  #          penalise the same fact twice.
+  #
+  #  false - score is out of the FULL rubric. An N/A criterion's points are
+  #          simply unavailable and the ceiling drops (e.g. 49.2 of 60 when
+  #          Objection Handling is excluded). Rationale: scores stay in one
+  #          currency across every call, at the cost of capping smooth calls.
+  #
+  # On a real call graded good/good/good/great/average/good with Objection
+  # Handling N/A: true gives 78, false gives 70. Both Grade B.
+  renormalize_on_not_applicable: true
+
+  # If fewer than this fraction of total dimension weight is applicable, the
+  # methodology score is reported as low-confidence and the report shows a
+  # banner rather than a hard number.
+  min_applicable_weight_fraction: 0.35
+
+  # Ch 5/7/8 penalty signals. Applied AFTER band scoring, as a flat point
+  # deduction off the methodology component. Capped in aggregate.
+  penalty_points:
+    repetitive_acknowledgement: 2
+    okay_and_advance: 2
+    monologue_over_180s: 3
+    no_personalization_callback: 3
+    customer_name_never_used: 1
+    fee_before_fit: 3
+    artificial_urgency: 4
+    no_next_step: 3
+    filled_the_silence: 2
+  max_total_penalty: 12
+
+  # Penalties may never exceed this share of the points actually earned.
+  # Prevents double-counting: the band anchors already describe these
+  # behaviours, so a call scored `missing` across the board must not be
+  # deducted again for the same conduct.
+  penalty_share_of_earned: 0.30
+
+  # Double-jeopardy guard: if the compliance layer already raised an incident
+  # for a behaviour, do not also deduct methodology penalty points for it.
+  suppress_if_compliance_incident:
+    artificial_urgency: ["Pressure Tactics"]
+
+# -----------------------------------------------------------------------------
+# Grades
+# -----------------------------------------------------------------------------
+grades:
+  - { min: 85, label: "Grade A — Excellent",          color: "#10b981" }
+  - { min: 70, label: "Grade B — Good",               color: "#3b82f6" }
+  - { min: 55, label: "Grade C — Needs Improvement",  color: "#f59e0b" }
+  - { min: 0,  label: "Grade D — Poor",               color: "#ef4444" }
+
+# -----------------------------------------------------------------------------
+# Confidence flags
+# -----------------------------------------------------------------------------
+confidence:
+  # Calls shorter than this are inherently hard to score. Flag, don't suppress.
+  min_call_seconds: 180
+  min_customer_turns: 5
+  # Dimensions where the LLM gave a band above `missing` with no evidence quote
+  # are demoted one band and counted here.
+  flag_if_unevidenced_dimensions_gte: 2
