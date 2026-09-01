@@ -1,0 +1,26 @@
+# Core pipeline dependencies
+google-cloud-speech==2.27.0
+# GCS is required for staging audio files before STT — long_running_recognize
+# has a 10 MB inline content limit; GCS URIs have no size limit.
+google-cloud-storage==2.16.0
+python-dotenv==1.0.1
+
+# FastAPI server
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# Database
+sqlalchemy==2.0.49
+
+# OpenRouter / LLM (OpenAI-compatible SDK)
+# httpx 0.28+ removed the `proxies` kwarg that openai 1.30 passes; pin to 0.27.x.
+openai==1.30.1
+httpx==0.27.2
+
+# File upload support for FastAPI
+python-multipart==0.0.9
+
+# JSON schema validation for LLM responses
+jsonschema==4.22.0
+
+PyYAML>=6.0
