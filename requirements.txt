@@ -7,7 +7,9 @@ python-dotenv==1.0.1
 
 # FastAPI server
 fastapi==0.111.0
+starlette==0.37.2
 uvicorn[standard]==0.29.0
+streamlit>=1.30.0
 
 # Database
 sqlalchemy==2.0.49
