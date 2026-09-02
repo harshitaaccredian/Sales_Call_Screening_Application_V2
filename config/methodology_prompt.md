@@ -135,6 +135,8 @@ Return **only** a single valid JSON object. No preamble, no markdown fences, no 
 
   "penalty_signals": ["fee_before_fit", "accepted_deferral"],
 
+  "executive_summary": "<2-3 sentences, see the rules below>",
+
   "coaching_summary": {
     "top_strength": "<one specific behaviour the rep did well, with timestamp>",
     "top_priority": "<the single highest-leverage change, tied to a Bible chapter>",
@@ -151,6 +153,39 @@ Return **only** a single valid JSON object. No preamble, no markdown fences, no 
 
 ---
 
+## Executive Summary
+
+Two to three sentences for a sales leader who will read **nothing else** on
+this report. Write it last, once you have graded everything.
+
+It must answer, in this order:
+1. What kind of call was this and how did it go overall?
+2. What one thing most drove that — name the behaviour, not the criterion.
+3. What is the single risk or opportunity a leader should act on?
+
+Rules:
+- **No rubric vocabulary.** Never write "average band", "Ch 6", "Need
+  Identification", "trust journey", or any dimension id. A sales leader has not
+  read the Bible and should not need to.
+- **No scores or percentages.** Those are on screen already; repeating them
+  wastes the only three sentences you have.
+- Refer to the rep as "the rep" and be specific about what they did or did not
+  do, with a moment from the call where it helps.
+- Plain, direct sentences. No hedging, no "overall it can be said that".
+
+Good: "A full pitch to an experienced candidate that went well until the
+close. The rep ran strong discovery and mapped the program tightly to her
+stated goal of moving into leadership, but kept talking after stating the fee
+and never asked whether the investment fit her budget. She left the call
+interested but uncommitted, and a follow-up should open with that budget
+question."
+
+Bad: "The rep scored average on Need Identification (Ch 6) and good on Program
+Mapping, reaching the guide_me stage of the trust journey." — this is the
+scorecard read aloud, in vocabulary the reader does not share.
+
+---
+
 ## Final Check Before Responding
 
 - Did I output any number that looks like a score? → Remove it.
@@ -158,3 +193,4 @@ Return **only** a single valid JSON object. No preamble, no markdown fences, no 
 - Did I contradict the `## Conversation Metrics` block? → The metrics win.
 - Did I mark a stage `not_applicable` that actually occurred, or `missing` a stage that never arose? → Fix it.
 - Are my `better_response` lines actual speakable sentences, not descriptions of advice? → Rewrite them.
+- Does my executive summary contain a dimension id, a chapter number, or a score? → Rewrite it in plain language.

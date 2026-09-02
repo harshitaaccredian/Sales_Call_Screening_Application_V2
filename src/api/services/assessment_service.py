@@ -122,6 +122,11 @@ def run_assessment(
             metrics=metrics,
         )
         score["coaching_summary"] = methodology_result.get("coaching_summary")
+        # Carry the deterministic metrics on the score object so the Call
+        # Overview can render them without changing render_methodology_section's
+        # signature (and therefore report_html.py).
+        score["_metrics"] = metrics
+        score["executive_summary"] = methodology_result.get("executive_summary")
 
         # IMPORTANT: writes to `rubric_assessment`, never `overall_call_score`.
         # `overall_call_score` and `sales_pitch_coverage` are produced by

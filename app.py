@@ -155,17 +155,8 @@ if start_pipeline:
                 
                 if html_report_path and os.path.exists(html_report_path):
                     with open(html_report_path, "r", encoding="utf-8") as f:
-                        html_content = f.read()
-                    
-                    st.subheader("QA Report")
-                    st.components.v1.html(html_content, height=800, scrolling=True)
-                    
-                    st.download_button(
-                        label="Download HTML Report",
-                        data=html_content,
-                        file_name=f"report_{pipeline_job_id}.html",
-                        mime="text/html"
-                    )
+                        st.session_state["html_content"] = f.read()
+                        st.session_state["pipeline_id"] = pipeline_job_id
                 else:
                     st.warning("Report generated, but HTML file could not be found.")
                 break
@@ -174,3 +165,14 @@ if start_pipeline:
                 break
             else:
                 status_placeholder.info(f"Processing... Current Step: {step}")
+
+if "html_content" in st.session_state:
+    st.subheader("QA Report")
+    st.components.v1.html(st.session_state["html_content"], height=800, scrolling=True)
+    
+    st.download_button(
+        label="Download HTML Report",
+        data=st.session_state["html_content"],
+        file_name=f"report_{st.session_state.get('pipeline_id', 'output')}.html",
+        mime="text/html"
+    )
