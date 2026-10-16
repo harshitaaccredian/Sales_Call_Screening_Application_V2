@@ -1,8 +1,21 @@
+import sys
+from pathlib import Path
+
+# ── Streamlit Cloud fix ──────────────────────────────────────────────────
+# Streamlit Cloud mounts repos at /mount/src/<repo>/.  The /mount/src/
+# directory shadows our project's own `src` package, causing KeyError.
+# Inserting the project root at the front of sys.path resolves this.
+_PROJECT_ROOT = str(Path(__file__).resolve().parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+# ─────────────────────────────────────────────────────────────────────────
+
 import streamlit as st
 import os
 import time
+import uuid
+import logging
 import threading
-from pathlib import Path
 from sqlalchemy.orm import Session
 
 # Import backend modules
@@ -11,7 +24,9 @@ from src.api.models.jobs import PipelineJob, SttJob
 from src.api.services import stt_service
 from src.api.routes.pipeline import _run_pipeline, cleanup_empty_job_folders, _AUDIO_EXTENSIONS
 
-# Ensure DB is initialized on startup
+logger = logging.getLogger(__name__)
+
+# Ensure DB is initialized on startup (via Alembic)
 init_db()
 
 st.set_page_config(page_title="Sales QA Pipeline", layout="wide")
@@ -23,6 +38,8 @@ with st.sidebar:
     course_data = st.file_uploader("Upload Course Data (CSV)", type=['csv'])
     customer_name = st.text_input("Customer Name (Optional)")
     sales_rep_name = st.text_input("Sales Rep Name (Optional)")
+    rep_id = st.text_input("Rep ID (Optional)")
+    call_id = st.text_input("Call ID (Optional)")
     sales_pitch = st.file_uploader("Upload Sales Pitch (Markdown, Optional)", type=['md'])
     
     start_pipeline = st.button("Run Pipeline", type="primary", use_container_width=True)
@@ -64,12 +81,12 @@ if start_pipeline:
         model = os.environ.get("OPENROUTER_DEFAULT_MODEL", "").strip() or "google/gemma-3-27b-it"
 
         # Initialize DB session to create jobs
-        db = new_session()
         stt_job_id = None
-        pipeline_job_id = None
+        pipeline_job_id = str(uuid.uuid4())
         
-        try:
-            with st.spinner("Initializing pipeline..."):
+        with st.spinner("Initializing pipeline..."):
+            db = new_session()
+            try:
                 if is_audio:
                     stt_job = SttJob(audio_path=recording_path_str, status="PENDING")
                     db.add(stt_job)
@@ -98,13 +115,14 @@ if start_pipeline:
 
                 # Create pipeline job
                 pipeline_job = PipelineJob(
+                    id=pipeline_job_id,
                     stt_job_id=stt_job_id,
                     input_path=pipeline_input_path,
                     course_path=course_path_str,
                     sales_pitch_path=sales_pitch_path_str,
                     model=model,
-                    rep_id=None,
-                    call_id=None,
+                    rep_id=rep_id if rep_id else None,
+                    call_id=call_id if call_id else None,
                     sales_rep_name=sales_rep_name if sales_rep_name else None,
                     customer_name=customer_name if customer_name else None,
                     current_step="STT_SUBMITTED" if stt_job_id else "PENDING",
@@ -112,18 +130,18 @@ if start_pipeline:
                 )
                 db.add(pipeline_job)
                 db.commit()
-                db.refresh(pipeline_job)
-                pipeline_job_id = pipeline_job.id
+            except Exception as db_exc:
+                logger.error(f"Failed to initialize job records in database: {db_exc}", exc_info=True)
+                st.warning("Database write failed; proceeding with file-based processing. The report will still be generated.")
+            finally:
+                db.close()
 
-                # Cleanup and output dirs
-                cleanup_empty_job_folders()
-                job_out_dir = Path("data/output") / pipeline_job_id
-                (job_out_dir / "report").mkdir(parents=True, exist_ok=True)
-                (job_out_dir / "transcript").mkdir(parents=True, exist_ok=True)
-                (job_out_dir / "stt_result").mkdir(parents=True, exist_ok=True)
-
-        finally:
-            db.close()
+            # Cleanup and output dirs
+            cleanup_empty_job_folders()
+            job_out_dir = Path("data/output") / pipeline_job_id
+            (job_out_dir / "report").mkdir(parents=True, exist_ok=True)
+            (job_out_dir / "transcript").mkdir(parents=True, exist_ok=True)
+            (job_out_dir / "stt_result").mkdir(parents=True, exist_ok=True)
 
         st.success(f"Pipeline started! ID: {pipeline_job_id}")
 
@@ -136,31 +154,41 @@ if start_pipeline:
         
         while True:
             time.sleep(3)
-            db = new_session()
-            try:
-                job = db.get(PipelineJob, pipeline_job_id)
-                if not job:
-                    status_placeholder.error("Pipeline job disappeared.")
-                    break
-                
-                state = job.status
-                step = job.current_step
-                error = job.error
-                html_report_path = job.report_html_path
-            finally:
-                db.close()
+            state = None
+            step = "PROCESSING"
+            error = None
+            html_report_path = None
 
-            if state == "DONE":
+            try:
+                db = new_session()
+                try:
+                    job = db.get(PipelineJob, pipeline_job_id)
+                    if job:
+                        state = job.status
+                        step = job.current_step
+                        error = job.error
+                        html_report_path = job.report_html_path
+                finally:
+                    db.close()
+            except Exception as poll_exc:
+                logger.warning(f"DB polling error for job {pipeline_job_id}: {poll_exc}")
+
+            # Check if report has already been generated on disk (fallback if DB update failed)
+            job_report_dir = Path("data/output") / pipeline_job_id / "report"
+            found_htmls = list(job_report_dir.glob("*.report.html")) if job_report_dir.exists() else []
+
+            if state == "DONE" or (found_htmls and not thread.is_alive()):
                 status_placeholder.success("Pipeline processing completed!")
+                resolved_html = html_report_path if (html_report_path and os.path.exists(html_report_path)) else (str(found_htmls[0]) if found_htmls else None)
                 
-                if html_report_path and os.path.exists(html_report_path):
-                    with open(html_report_path, "r", encoding="utf-8") as f:
+                if resolved_html and os.path.exists(resolved_html):
+                    with open(resolved_html, "r", encoding="utf-8") as f:
                         st.session_state["html_content"] = f.read()
                         st.session_state["pipeline_id"] = pipeline_job_id
                 else:
                     st.warning("Report generated, but HTML file could not be found.")
                 break
-            elif state == "FAILED":
+            elif state == "FAILED" and not found_htmls:
                 status_placeholder.error(f"Pipeline failed: {error}")
                 break
             else:
