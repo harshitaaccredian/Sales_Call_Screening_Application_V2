@@ -9,7 +9,7 @@ to expose in API responses and URLs without leaking sequential enumeration.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
@@ -17,9 +17,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.api.db import Base
 
+_IST = timezone(timedelta(hours=5, minutes=30))
+
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(_IST)
 
 
 def _new_uuid() -> str:
@@ -152,6 +154,8 @@ class PipelineJob(Base):
     total_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     compliance_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     methodology_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    grade: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    grade_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     # discovery | full_pitch | follow_up | closing | transactional.
     # Scores are only comparable WITHIN a call type — a short discovery call is
@@ -172,6 +176,20 @@ class PipelineJob(Base):
     # now is silently wrong with no way to detect it after the fact.
     rubric_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     scoring_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Basic Call Information & Metrics
+    course_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    course_institute: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    call_duration: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    no_of_words: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rep_words: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    customer_words: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rep_talk_ratio_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    incident_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    highest_severity: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    call_flagged: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    tokens_utilized: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Error message when status == FAILED.
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
